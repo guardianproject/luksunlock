@@ -25,3 +25,12 @@ http://forum.xda-developers.com/attachment.php?attachmentid=459501&d=1291847781
 
 And the init.rc.txt:
 http://forum.xda-developers.com/attachment.php?attachmentid=459500&d=1291847781
+
+
+--------
+Building
+--------
+
+You'll need some .so files from either an Android emulator or your phone, just
+start the emulator or plug in your phone to USB in dev mode, so 'adb pull' can
+get the files.
