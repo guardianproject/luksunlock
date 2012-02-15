@@ -1,0 +1,3 @@
+[submodule "external/libpng"]
+	path = external/libpng
+	url = git://libpng.git.sourceforge.net/gitroot/libpng/libpng
