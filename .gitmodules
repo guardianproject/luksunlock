@@ -1,3 +1,6 @@
 [submodule "external/libpng"]
 	path = external/libpng
 	url = git://libpng.git.sourceforge.net/gitroot/libpng/libpng
+[submodule "external/android-system-core"]
+	path = external/android-system-core
+	url = https://android.googlesource.com/platform/system/core.git
