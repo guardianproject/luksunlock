@@ -27,7 +27,7 @@ NDK_TOOLCHAIN=$(NDK_BASE)/toolchains/arm-linux-androideabi-4.4.3/prebuilt/$(NDK_
 HOST := arm-linux-androideabi
 
 # install root for built files
-DESTDIR = $(CWD)
+DESTDIR = $(EXTERNAL_ROOT)
 # TODO try adding the Android-style /data/app.name here
 prefix = /data/local
 LOCAL := $(DESTDIR)$(prefix)
@@ -43,74 +43,25 @@ RANLIB := $(NDK_TOOLCHAIN)/bin/arm-linux-androideabi-ranlib
 STRIP := $(NDK_TOOLCHAIN)/bin/arm-linux-androideabi-strip \
 	--strip-unneeded -R .note -R .comment
 
-CFLAGS = -DANDROID -I$(LOCAL)/include
-LDFLAGS = -L$(LOCAL)/lib -Wl,--rpath,$(LOCAL)/lib
+ALL_CFLAGS = -I$(LOCAL)/include -I$(EXTERNAL_ROOT)/android-system-core/include
+ALL_LDFLAGS = -L$(LOCAL)/lib -Wl,--allow-shlib-undefined
 #ALL_LDFLAGS = -Wl,--entry=main,-rpath=$(ANDROID_NDK_ROOT)/build/platforms/android-$(NDK_PLATFORM_VER)/arch-arm/usr/lib,-dynamic-linker=/system/bin/linker -L$(NDK_SYSROOT)/usr/lib  -nostdlib -lc -ldl
-#LIBS = -lc -ldl
+ALL_LIBS = -lc -ldl
 
 
+SOURCES = luksunlock.c minui/events.c minui/graphics.c minui/resources.c
+OBJECTS := $(SOURCES:.c=.o)
 
-all: $(LOCAL)/lib/libcutils.so $(LOCAL)/lib/libpixelflinger.so
+all: luksunlock
 
-.PHONY: clean
+%.o: %.c
+	$(CC) $(ALL_CFLAGS) $(CFLAGS) -o "$*.o" -c "$*.c"
 
-# these files should come from your phone or emulator.  They are part of the
-# standard Android system, but the NDK does not provide them because they are
-# private, internal libs
-
-$(LOCAL)/lib:
-	install -d $(LOCAL)/lib
-
-$(LOCAL)/lib/libcutils.so: $(LOCAL)/lib
-	adb pull /system/lib/libcutils.so $(LOCAL)/lib/
-$(LOCAL)/lib/libpixelflinger.so:
-	adb pull /system/lib/libpixelflinger.so $(LOCAL)/lib/
+luksunlock: $(OBJECTS)
+	$(CC) $(ALL_LDFLAGS) $(LDFLAGS) -o luksunlock $^ \
+		luksunlock.o minui/events.o minui/graphics.o minui/resources.o \
+		$(LOCAL)/lib/libpng.a -lz -llog -lpixelflinger
 
 
-
-#------------------------------------------------------------------------------#
-# libpng
-
-libpng/config.sub: config.sub
-	cp config.sub libpng/config.sub
-
-libpng/config.guess: config.guess
-	cp config.guess libpng/config.guess
-
-libpng/configure: libpng/configure.ac
-	cd libpng && ./autogen.sh
-
-libpng/Makefile: libpng/config.sub libpng/config.guess libpng/configure
-	cd libpng && \
-		./configure \
-			CC="$(CC)" \
-			AR=$(AR) \
-			RANLIB=$(RANLIB) \
-			CFLAGS="$(CFLAGS)" \
-			LDFLAGS="$(LDFLAGS)" \
-			--enable-static \
-			--with-gnu-ld \
-			--host=$(HOST)
-
-libpng-build-stamp: libpng/Makefile
-	$(MAKE) -C libpng
-	touch libpng-build-stamp
-
-libpng-build: libpng-build-stamp
-
-$(LOCAL)/lib/libpng.a: libpng-build
-	$(MAKE) -C libpng DESTDIR=$(DESTDIR) prefix=$(prefix) install
-
-libpng-install: $(LOCAL)/lib/libpng.a
-
-libpng-clean:
-	-rm -f libpng-build-stamp
-	$(MAKE) -C libpng clean
-
-
-
-#------------------------------------------------------------------------------#
-# clean
-
-clean: libpng-clean
-	rm -f $(LOCAL)/lib/libcutils.so $(LOCAL)/lib/libpixelflinger.so
+clean:
+	rm -f luksunlock $(OBJECTS)
