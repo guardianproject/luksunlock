@@ -59,7 +59,6 @@ all: luksunlock
 
 luksunlock: $(OBJECTS)
 	$(CC) $(ALL_LDFLAGS) $(LDFLAGS) -o luksunlock $^ \
-		luksunlock.o minui/events.o minui/graphics.o minui/resources.o \
 		$(LOCAL)/lib/libpng.a -lz -llog -lpixelflinger
 
 
