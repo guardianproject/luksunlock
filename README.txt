@@ -34,3 +34,13 @@ Building
 You'll need some .so files from either an Android emulator or your phone, just
 start the emulator or plug in your phone to USB in dev mode, so 'adb pull' can
 get the files.
+
+Here's the current general idea for building:
+
+ cd luksunlock
+ git submodule init
+ git submodule update
+ make -C external
+ make -C external libpng-build
+ make -C external libpng-install
+ make
