@@ -50,7 +50,7 @@ LDFLAGS = -L$(LOCAL)/lib -Wl,--rpath,$(LOCAL)/lib
 
 
 
-all: $(LOCAL)/lib/libcutils.so $(LOCAL)/lib/libpixelflinger.so
+all: $(LOCAL)/lib/libcutils.so $(LOCAL)/lib/libpixelflinger.so $(LOCAL)/lib/libhardware_legacy.so
 
 .PHONY: clean
 
@@ -65,6 +65,8 @@ $(LOCAL)/lib/libcutils.so: $(LOCAL)/lib
 	adb pull /system/lib/libcutils.so $(LOCAL)/lib/
 $(LOCAL)/lib/libpixelflinger.so:
 	adb pull /system/lib/libpixelflinger.so $(LOCAL)/lib/
+$(LOCAL)/lib/libhardware_legacy.so:
+	adb pull /system/lib/libhardware_legacy.so $(LOCAL)/lib/
 
 
 
