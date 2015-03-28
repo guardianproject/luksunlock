@@ -54,25 +54,6 @@ void wipe_passphrase() {
 	memset(passphrase, 0, 1024);
 }
 
-char *escape_input(char *str) {
-	size_t i, j = 0;
-	char *new = malloc(sizeof(char) * (strlen(str) * 2 + 1));
-
-	for(i = 0; i < strlen(str); i++) {
-		if(!(((str[i] >= 'A') && (str[i] <= 'Z')) ||
-		((str[i] >= 'a') && (str[i] <= 'z')) ||
-		((str[i] >= '0') && (str[i] <= '9')) )) {
-			new[j] = '\\';
-			j++;
-		}
-		new[j] = str[i];
-		j++;
-	}
-	new[j] = '\0';
-
-	return new;
-}
-
 void draw_keymap() {
 	size_t i;
 	char keybuf[2];
@@ -102,8 +83,6 @@ static void *input_thread() {
 			ev_get(&ev, 0);
 
 			switch(ev.type) {
-				//case EV_SYN:
-				//	continue;
 				case EV_REL:
 					rel_sum += ev.value;
 					break;
@@ -137,6 +116,7 @@ void ui_init(void) {
 
 	// Generate bitmap from /system/res/padlock.png ( you can change the path in minui/resources.c)
 	res_create_surface("padlock", &background);
+	wipe_passphrase();
 }
 
 void draw_screen() {
@@ -181,10 +161,8 @@ void generate_keymap() {
 	for(i = 0, key = CHAR_START; key < CHAR_END; key++, i++, xpos += (CHAR_WIDTH * 2)) {
 		if(xpos >= gr_fb_width() - CHAR_WIDTH) {
 			ypos += CHAR_HEIGHT * 3 / 2;
-
 			xpos = 0;
 		}
-
 		keys[i].key = key;
 		keys[i].xpos = xpos;
 		keys[i].ypos = ypos;
@@ -197,9 +175,6 @@ void generate_keymap() {
 void unlock() {
 	char buffer[2048];
 	int fd, failed = 0;
-
-	// FIXME: REMOVE THIS BEFORE ANY USE
-	printf("Passphrase: >>>%s<<<\n", passphrase);
 
 	gr_color(0, 0, 0, 255);
 	gr_fill(0, 0, gr_fb_width(), gr_fb_height());
@@ -238,7 +213,6 @@ void unlock() {
 	gr_flip();
 
 	sleep(2);
-	//passphrase[0] = '\0';
 	wipe_passphrase();
 }
 
@@ -271,12 +245,11 @@ void handle_key(struct input_event event) {
 
 	// Pressed joystick
 	if(event.type == EV_KEY && event.value == 0 && event.code == BTN_MOUSE) {
-		snprintf(passphrase, sizeof(passphrase) - 1, "%s%c", passphrase, keys[current].key);
+		passphrase[strlen(passphrase)] = keys[current].key;
 	}
 
 	// Pressed vol down
 	if(event.type == EV_KEY && event.code == KEY_VOLUMEDOWN)
-		//passphrase[strlen(passphrase) - 1] = '\0';
 		wipe_passphrase();
 
 	// Pressed vol up
@@ -308,11 +281,6 @@ void handle_touch(struct input_event event) {
 		int row = (touch_y - CHAR_HEIGHT * 4) / (CHAR_HEIGHT * 3 / 2);
 		int col = touch_x / (CHAR_WIDTH * 2);
 		int index = cols*row + col;
-		if ( 0 
-		//	|| (touch_x % (CHAR_WIDTH * 3 / 2) > CHAR_WIDTH) // touched between characters horizontally
-		//	|| (touch_y % (CHAR_HEIGHT * 2) > CHAR_HEIGHT) // likewise, vertically
-		//	|| (index < 0 || index >= (CHAR_END - CHAR_START)) // outside keyboard
-		) return;
 		keys[current].selected = 0;
 		current = index;
 		passphrase[strlen(passphrase)] = keys[current].key;
