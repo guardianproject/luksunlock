@@ -172,6 +172,41 @@ void generate_keymap() {
 	keys[current].selected = 1;
 }
 
+int try_unlock(char* device, char* name) {
+	// classic pipe+dup+exec
+	int pipes[2];
+	int pid;
+	pipe(pipes);
+	if ((pid = fork()) == -1) {
+		perror("fork");
+		_exit(1);
+	} else if (pid == 0) { // child cryptsetup
+		close(pipes[1]); // close the writing pipe
+		dup2(pipes[0], 0); // make new stdin the reading pipe
+		close(pipes[0]); // it's unneeded now
+		execlp(CRYPTSETUP, "cryptsetup", "luksOpen", device, name, NULL);
+		perror("exec"); // still here?!
+		_exit(1); // no flush
+	}
+	// parent should write password now
+	close(pipes[0]);
+	write(pipes[1], passphrase, strlen(passphrase));
+	close(pipes[1]);
+	wait(NULL);
+	// check /dev/mapper/whatever for readability
+	char buffer[4096];
+	snprintf(buffer, sizeof(buffer) - 1, "/dev/mapper/%s", name);
+	int fd = open(buffer, 0);
+	if(fd < 0)
+		return 1;
+	else {
+		close(fd);
+		return 0;
+	}
+}
+
+	
+
 void unlock() {
 	char buffer[2048];
 	int fd, failed = 0;
@@ -183,25 +218,7 @@ void unlock() {
 	gr_text((gr_fb_width() / 2) - ((strlen("Unlocking...") / 2) * CHAR_WIDTH), gr_fb_height() / 2, "Unlocking...");
 	gr_flip();
 
-	snprintf(buffer, sizeof(buffer) - 1, "echo %s | %s luksOpen %s %s", escape_input(passphrase), CRYPTSETUP, SDCARD_DEVICE, SDCARD_MAPPER_NAME);
-	system(buffer);
-
-	snprintf(buffer, sizeof(buffer) - 1, "echo %s | %s luksOpen %s %s", escape_input(passphrase), CRYPTSETUP, DATA_DEVICE, DATA_MAPPER_NAME);
-	system(buffer);
-
-	snprintf(buffer, sizeof(buffer) - 1, "/dev/mapper/%s", SDCARD_MAPPER_NAME);
-	fd = open(buffer, 0);
-	if(fd < 0)
-		failed = 1;
-	else
-		close(fd);
-
-	snprintf(buffer, sizeof(buffer) - 1, "/dev/mapper/%s", DATA_MAPPER_NAME);
-	fd = open(buffer, 0);
-	if(fd < 0)
-		failed = 1;
-	else
-		close(fd);
+	failed = try_unlock(SDCARD_DEVICE, SDCARD_MAPPER_NAME) + try_unlock(DATA_DEVICE, DATA_MAPPER_NAME);
 
 	if(!failed) {
 		gr_text((gr_fb_width() / 2) - ((strlen("Success!") / 2) * CHAR_WIDTH), gr_fb_height() / 2 + CHAR_HEIGHT, "Success!");
