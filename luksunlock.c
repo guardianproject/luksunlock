@@ -178,9 +178,9 @@ void generate_keymap() {
 	xpos = 0;
 	ypos = CHAR_HEIGHT * 4;
 
-	for(i = 0, key = CHAR_START; key < CHAR_END; key++, i++, xpos += (CHAR_WIDTH * 3)) {
+	for(i = 0, key = CHAR_START; key < CHAR_END; key++, i++, xpos += (CHAR_WIDTH * 2)) {
 		if(xpos >= gr_fb_width() - CHAR_WIDTH) {
-			ypos += CHAR_HEIGHT;
+			ypos += CHAR_HEIGHT * 3 / 2;
 
 			xpos = 0;
 		}
@@ -197,6 +197,9 @@ void generate_keymap() {
 void unlock() {
 	char buffer[2048];
 	int fd, failed = 0;
+
+	// FIXME: REMOVE THIS BEFORE ANY USE
+	printf("Passphrase: >>>%s<<<\n", passphrase);
 
 	gr_color(0, 0, 0, 255);
 	gr_fill(0, 0, gr_fb_width(), gr_fb_height());
@@ -242,7 +245,7 @@ void unlock() {
 void handle_key(struct input_event event) {
 	int cols;
 
-	cols = gr_fb_width() / (CHAR_WIDTH * 3);
+	cols = gr_fb_width() / (CHAR_WIDTH * 2);
 	keys[current].selected = 0;
 
 	// Joystick down or up
@@ -301,13 +304,14 @@ void handle_touch(struct input_event event) {
 			touch_flag_ok++;
 		}
 	} else if (event.type == EV_SYN && event.code == SYN_MT_REPORT && touch_flag_ok == 4) {
-		int cols = gr_fb_width() / (CHAR_WIDTH * 3) + 1;
-		int row = (touch_y - CHAR_HEIGHT*4) / CHAR_HEIGHT;
-		int col = touch_x / (CHAR_WIDTH * 3);
+		int cols = gr_fb_width() / (CHAR_WIDTH * 2);
+		int row = (touch_y - CHAR_HEIGHT * 4) / (CHAR_HEIGHT * 3 / 2);
+		int col = touch_x / (CHAR_WIDTH * 2);
 		int index = cols*row + col;
-		if (
-			(touch_x % (CHAR_WIDTH * 3) > CHAR_WIDTH) // touched between characters
-			|| (index < 0 || index >= (CHAR_END - CHAR_START)) // outside keyboard
+		if ( 0 
+		//	|| (touch_x % (CHAR_WIDTH * 3 / 2) > CHAR_WIDTH) // touched between characters horizontally
+		//	|| (touch_y % (CHAR_HEIGHT * 2) > CHAR_HEIGHT) // likewise, vertically
+		//	|| (index < 0 || index >= (CHAR_END - CHAR_START)) // outside keyboard
 		) return;
 		keys[current].selected = 0;
 		current = index;
