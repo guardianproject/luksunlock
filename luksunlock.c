@@ -16,8 +16,8 @@
 #define SDCARD_MAPPER_NAME	"encrypted-sdcard"
 #define DATA_MAPPER_NAME	"encrypted-data"
 
-#define CHAR_WIDTH		10
-#define CHAR_HEIGHT		18
+#define CHAR_WIDTH		23
+#define CHAR_HEIGHT		41
 
 #define CHAR_START		0x20
 #define CHAR_END		0x7E
