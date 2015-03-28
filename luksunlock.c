@@ -40,6 +40,10 @@ unsigned int sp = 0;
 gr_surface background;
 int res, current = 0;
 
+void wipe_passphrase() {
+	memset(passphrase, 0, 1024);
+}
+
 char *escape_input(char *str) {
 	size_t i, j = 0;
 	char *new = malloc(sizeof(char) * (strlen(str) * 2 + 1));
@@ -201,11 +205,15 @@ void unlock() {
 	fd = open(buffer, 0);
 	if(fd < 0)
 		failed = 1;
+	else
+		close(fd);
 
 	snprintf(buffer, sizeof(buffer) - 1, "/dev/mapper/%s", DATA_MAPPER_NAME);
 	fd = open(buffer, 0);
 	if(fd < 0)
 		failed = 1;
+	else
+		close(fd);
 
 	if(!failed) {
 		gr_text((gr_fb_width() / 2) - ((strlen("Success!") / 2) * CHAR_WIDTH), gr_fb_height() / 2 + CHAR_HEIGHT, "Success!");
@@ -217,7 +225,8 @@ void unlock() {
 	gr_flip();
 
 	sleep(2);
-	passphrase[0] = '\0';
+	//passphrase[0] = '\0';
+	wipe_passphrase();
 }
 
 void handle_key(struct input_event event) {
@@ -254,7 +263,8 @@ void handle_key(struct input_event event) {
 
 	// Pressed vol down
 	if(event.type == EV_KEY && event.code == KEY_VOLUMEDOWN)
-		passphrase[strlen(passphrase) - 1] = '\0';
+		//passphrase[strlen(passphrase) - 1] = '\0';
+		wipe_passphrase();
 
 	// Pressed vol up
 	if(event.type == 1 && event.code == KEY_VOLUMEUP) {
