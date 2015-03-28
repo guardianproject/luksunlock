@@ -22,6 +22,16 @@
 #define CHAR_START		0x20
 #define CHAR_END		0x7E
 
+// should have been defined in linux/input.h ?!
+#define ABS_MT_TRACKING_ID	0x39	/* Unique ID of initiated contact */
+#define ABS_MT_POSITION_X	0x35	/* Center X touch position */
+#define ABS_MT_POSITION_Y	0x36	/* Center Y touch position */
+#define ABS_MT_WIDTH_MAJOR	0x32	/* Major axis of approaching ellipse */
+#define ABS_MT_WIDTH_MINOR	0x33	/* Minor axis (omit if circular) */
+#define SYN_MT_REPORT		2
+#define ABS_MT_TOUCH_MAJOR	0x30	/* Major axis of touching ellipse */
+#define ABS_MT_WIDTH_MAJOR	0x32	/* Major axis of approaching ellipse */
+
 struct keymap {
 	unsigned char key;
 	int xpos;
@@ -92,8 +102,8 @@ static void *input_thread() {
 			ev_get(&ev, 0);
 
 			switch(ev.type) {
-				case EV_SYN:
-					continue;
+				//case EV_SYN:
+				//	continue;
 				case EV_REL:
 					rel_sum += ev.value;
 					break;
@@ -105,7 +115,7 @@ static void *input_thread() {
 			if(rel_sum > 4 || rel_sum < -4)
 				break;
 
-		} while(ev.type != EV_KEY || ev.code > KEY_MAX);
+		} while((ev.type != EV_KEY || ev.code > KEY_MAX) && ev.type != EV_ABS && ev.type != EV_SYN);
 
 		rel_sum = 0;
 
@@ -274,6 +284,39 @@ void handle_key(struct input_event event) {
 	draw_screen();
 }
 
+void handle_touch(struct input_event event) {
+	static __s32 touch_x;
+	static __s32 touch_y;
+	static int touch_flag_ok;
+	if (event.type == EV_ABS) {
+		if (event.code == ABS_MT_TRACKING_ID) {
+			touch_flag_ok = 0;
+		} else if (event.code == ABS_MT_POSITION_X) {
+			touch_x = event.value;
+			touch_flag_ok++;
+		} else if (event.code == ABS_MT_POSITION_Y) {
+			touch_y = event.value;
+			touch_flag_ok++;
+		} else if ((event.code == ABS_MT_WIDTH_MAJOR || event.code == ABS_MT_TOUCH_MAJOR) && event.value == 0) {
+			touch_flag_ok++;
+		}
+	} else if (event.type == EV_SYN && event.code == SYN_MT_REPORT && touch_flag_ok == 4) {
+		int cols = gr_fb_width() / (CHAR_WIDTH * 3) + 1;
+		int row = (touch_y - CHAR_HEIGHT*4) / CHAR_HEIGHT;
+		int col = touch_x / (CHAR_WIDTH * 3);
+		int index = cols*row + col;
+		if (
+			(touch_x % (CHAR_WIDTH * 3) > CHAR_WIDTH) // touched between characters
+			|| (index < 0 || index >= (CHAR_END - CHAR_START)) // outside keyboard
+		) return;
+		keys[current].selected = 0;
+		current = index;
+		passphrase[strlen(passphrase)] = keys[current].key;
+		keys[current].selected = 1;
+		draw_screen();
+	}
+}
+
 int main(int argc, char **argv, char **envp) {
 	struct input_event event;
 	pthread_t t;
@@ -312,7 +355,9 @@ int main(int argc, char **argv, char **envp) {
 			case(EV_REL):
 				handle_key(event);
 				break;
+			case(EV_ABS):
 			case(EV_SYN):
+				handle_touch(event);
 				break;
 		}
 	}
