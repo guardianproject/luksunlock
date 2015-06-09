@@ -298,6 +298,7 @@ void handle_touch(struct input_event event) {
 		int row = (touch_y - CHAR_HEIGHT * 4) / (CHAR_HEIGHT * 3 / 2);
 		int col = touch_x / (CHAR_WIDTH * 2);
 		int index = cols*row + col;
+		if (index < 0 || index >= (CHAR_END - CHAR_START)) return; // touching outside keyboard makes no sense
 		keys[current].selected = 0;
 		current = index;
 		passphrase[strlen(passphrase)] = keys[current].key;
