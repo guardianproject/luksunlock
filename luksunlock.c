@@ -16,11 +16,21 @@
 #define SDCARD_MAPPER_NAME	"encrypted-sdcard"
 #define DATA_MAPPER_NAME	"encrypted-data"
 
-#define CHAR_WIDTH		10
-#define CHAR_HEIGHT		18
+#define CHAR_WIDTH		23
+#define CHAR_HEIGHT		41
 
 #define CHAR_START		0x20
 #define CHAR_END		0x7E
+
+// should have been defined in linux/input.h ?!
+#define ABS_MT_TRACKING_ID	0x39	/* Unique ID of initiated contact */
+#define ABS_MT_POSITION_X	0x35	/* Center X touch position */
+#define ABS_MT_POSITION_Y	0x36	/* Center Y touch position */
+#define ABS_MT_WIDTH_MAJOR	0x32	/* Major axis of approaching ellipse */
+#define ABS_MT_WIDTH_MINOR	0x33	/* Minor axis (omit if circular) */
+#define SYN_MT_REPORT		2
+#define ABS_MT_TOUCH_MAJOR	0x30	/* Major axis of touching ellipse */
+#define ABS_MT_WIDTH_MAJOR	0x32	/* Major axis of approaching ellipse */
 
 struct keymap {
 	unsigned char key;
@@ -40,23 +50,8 @@ unsigned int sp = 0;
 gr_surface background;
 int res, current = 0;
 
-char *escape_input(char *str) {
-	size_t i, j = 0;
-	char *new = malloc(sizeof(char) * (strlen(str) * 2 + 1));
-
-	for(i = 0; i < strlen(str); i++) {
-		if(!(((str[i] >= 'A') && (str[i] <= 'Z')) ||
-		((str[i] >= 'a') && (str[i] <= 'z')) ||
-		((str[i] >= '0') && (str[i] <= '9')) )) {
-			new[j] = '\\';
-			j++;
-		}
-		new[j] = str[i];
-		j++;
-	}
-	new[j] = '\0';
-
-	return new;
+void wipe_passphrase() {
+	memset(passphrase, 0, 1024);
 }
 
 void draw_keymap() {
@@ -88,8 +83,6 @@ static void *input_thread() {
 			ev_get(&ev, 0);
 
 			switch(ev.type) {
-				case EV_SYN:
-					continue;
 				case EV_REL:
 					rel_sum += ev.value;
 					break;
@@ -101,7 +94,7 @@ static void *input_thread() {
 			if(rel_sum > 4 || rel_sum < -4)
 				break;
 
-		} while(ev.type != EV_KEY || ev.code > KEY_MAX);
+		} while((ev.type != EV_KEY || ev.code > KEY_MAX) && ev.type != EV_ABS && ev.type != EV_SYN);
 
 		rel_sum = 0;
 
@@ -123,6 +116,7 @@ void ui_init(void) {
 
 	// Generate bitmap from /system/res/padlock.png ( you can change the path in minui/resources.c)
 	res_create_surface("padlock", &background);
+	wipe_passphrase();
 }
 
 void draw_screen() {
@@ -164,13 +158,11 @@ void generate_keymap() {
 	xpos = 0;
 	ypos = CHAR_HEIGHT * 4;
 
-	for(i = 0, key = CHAR_START; key < CHAR_END; key++, i++, xpos += (CHAR_WIDTH * 3)) {
+	for(i = 0, key = CHAR_START; key < CHAR_END; key++, i++, xpos += (CHAR_WIDTH * 2)) {
 		if(xpos >= gr_fb_width() - CHAR_WIDTH) {
-			ypos += CHAR_HEIGHT;
-
+			ypos += CHAR_HEIGHT * 3 / 2;
 			xpos = 0;
 		}
-
 		keys[i].key = key;
 		keys[i].xpos = xpos;
 		keys[i].ypos = ypos;
@@ -179,6 +171,41 @@ void generate_keymap() {
 
 	keys[current].selected = 1;
 }
+
+int try_unlock(char* device, char* name) {
+	// classic pipe+dup+exec
+	int pipes[2];
+	int pid;
+	pipe(pipes);
+	if ((pid = fork()) == -1) {
+		perror("fork");
+		_exit(1);
+	} else if (pid == 0) { // child cryptsetup
+		close(pipes[1]); // close the writing pipe
+		dup2(pipes[0], 0); // make new stdin the reading pipe
+		close(pipes[0]); // it's unneeded now
+		execlp(CRYPTSETUP, "cryptsetup", "luksOpen", device, name, NULL);
+		perror("exec"); // still here?!
+		_exit(1); // no flush
+	}
+	// parent should write password now
+	close(pipes[0]);
+	write(pipes[1], passphrase, strlen(passphrase));
+	close(pipes[1]);
+	wait(NULL);
+	// check /dev/mapper/whatever for readability
+	char buffer[4096];
+	snprintf(buffer, sizeof(buffer) - 1, "/dev/mapper/%s", name);
+	int fd = open(buffer, 0);
+	if(fd < 0)
+		return 1;
+	else {
+		close(fd);
+		return 0;
+	}
+}
+
+	
 
 void unlock() {
 	char buffer[2048];
@@ -191,21 +218,7 @@ void unlock() {
 	gr_text((gr_fb_width() / 2) - ((strlen("Unlocking...") / 2) * CHAR_WIDTH), gr_fb_height() / 2, "Unlocking...");
 	gr_flip();
 
-	snprintf(buffer, sizeof(buffer) - 1, "echo %s | %s luksOpen %s %s", escape_input(passphrase), CRYPTSETUP, SDCARD_DEVICE, SDCARD_MAPPER_NAME);
-	system(buffer);
-
-	snprintf(buffer, sizeof(buffer) - 1, "echo %s | %s luksOpen %s %s", escape_input(passphrase), CRYPTSETUP, DATA_DEVICE, DATA_MAPPER_NAME);
-	system(buffer);
-
-	snprintf(buffer, sizeof(buffer) - 1, "/dev/mapper/%s", SDCARD_MAPPER_NAME);
-	fd = open(buffer, 0);
-	if(fd < 0)
-		failed = 1;
-
-	snprintf(buffer, sizeof(buffer) - 1, "/dev/mapper/%s", DATA_MAPPER_NAME);
-	fd = open(buffer, 0);
-	if(fd < 0)
-		failed = 1;
+	failed = try_unlock(SDCARD_DEVICE, SDCARD_MAPPER_NAME) + try_unlock(DATA_DEVICE, DATA_MAPPER_NAME);
 
 	if(!failed) {
 		gr_text((gr_fb_width() / 2) - ((strlen("Success!") / 2) * CHAR_WIDTH), gr_fb_height() / 2 + CHAR_HEIGHT, "Success!");
@@ -217,13 +230,13 @@ void unlock() {
 	gr_flip();
 
 	sleep(2);
-	passphrase[0] = '\0';
+	wipe_passphrase();
 }
 
 void handle_key(struct input_event event) {
 	int cols;
 
-	cols = gr_fb_width() / (CHAR_WIDTH * 3);
+	cols = gr_fb_width() / (CHAR_WIDTH * 2);
 	keys[current].selected = 0;
 
 	// Joystick down or up
@@ -249,12 +262,12 @@ void handle_key(struct input_event event) {
 
 	// Pressed joystick
 	if(event.type == EV_KEY && event.value == 0 && event.code == BTN_MOUSE) {
-		snprintf(passphrase, sizeof(passphrase) - 1, "%s%c", passphrase, keys[current].key);
+		passphrase[strlen(passphrase)] = keys[current].key;
 	}
 
 	// Pressed vol down
 	if(event.type == EV_KEY && event.code == KEY_VOLUMEDOWN)
-		passphrase[strlen(passphrase) - 1] = '\0';
+		wipe_passphrase();
 
 	// Pressed vol up
 	if(event.type == 1 && event.code == KEY_VOLUMEUP) {
@@ -262,6 +275,36 @@ void handle_key(struct input_event event) {
 	}
 
 	draw_screen();
+}
+
+void handle_touch(struct input_event event) {
+	static __s32 touch_x;
+	static __s32 touch_y;
+	static int touch_flag_ok;
+	if (event.type == EV_ABS) {
+		if (event.code == ABS_MT_TRACKING_ID) {
+			touch_flag_ok = 0;
+		} else if (event.code == ABS_MT_POSITION_X) {
+			touch_x = event.value;
+			touch_flag_ok++;
+		} else if (event.code == ABS_MT_POSITION_Y) {
+			touch_y = event.value;
+			touch_flag_ok++;
+		} else if ((event.code == ABS_MT_WIDTH_MAJOR || event.code == ABS_MT_TOUCH_MAJOR) && event.value == 0) {
+			touch_flag_ok++;
+		}
+	} else if (event.type == EV_SYN && event.code == SYN_MT_REPORT && touch_flag_ok == 4) {
+		int cols = gr_fb_width() / (CHAR_WIDTH * 2);
+		int row = (touch_y - CHAR_HEIGHT * 4) / (CHAR_HEIGHT * 3 / 2);
+		int col = touch_x / (CHAR_WIDTH * 2);
+		int index = cols*row + col;
+		if (index < 0 || index >= (CHAR_END - CHAR_START)) return; // touching outside keyboard makes no sense
+		keys[current].selected = 0;
+		current = index;
+		passphrase[strlen(passphrase)] = keys[current].key;
+		keys[current].selected = 1;
+		draw_screen();
+	}
 }
 
 int main(int argc, char **argv, char **envp) {
@@ -302,7 +345,9 @@ int main(int argc, char **argv, char **envp) {
 			case(EV_REL):
 				handle_key(event);
 				break;
+			case(EV_ABS):
 			case(EV_SYN):
+				handle_touch(event);
 				break;
 		}
 	}
